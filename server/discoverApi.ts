@@ -1,12 +1,12 @@
+import {
+  circuitJsonToFootprinter,
+  type FootprinterDiscoveryCandidate,
+} from 'circuit-json-to-footprinter'
 import { z } from 'zod'
 import { summarizeCopperComparison } from './copperComparison.js'
 import {
-  discoverFootprinterString,
-  type FootprinterDiscoveryCandidate,
-} from './footprintDiscovery.js'
-import {
   buildFootprinterPreview,
-  buildJlcpcbPreview,
+  buildJlcpcbFootprint,
   PreviewBuildError,
   type FootprintPreview,
 } from './footprints.js'
@@ -92,11 +92,15 @@ export const handleDiscoverRequest = async (
   }
 
   try {
-    const target = await buildJlcpcbPreview(parsed.data.jlcpcbPartNumber)
-    const discovery = discoverFootprinterString(
-      target,
-      parsed.data.maxCandidates,
+    const { circuitJson, preview: target } = await buildJlcpcbFootprint(
+      parsed.data.jlcpcbPartNumber,
     )
+    const discovery = circuitJsonToFootprinter(circuitJson, {
+      maxCandidates: parsed.data.maxCandidates,
+      sourceHints: target.sourceHints,
+      subtitle: target.subtitle,
+      title: target.title,
+    })
     if (!discovery.best) {
       return {
         body: {

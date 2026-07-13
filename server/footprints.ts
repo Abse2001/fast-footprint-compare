@@ -1,4 +1,5 @@
 import { fp } from '@tscircuit/footprinter'
+import type { AnyCircuitElement } from 'circuit-json'
 import {
   EasyEdaJsonSchema,
   convertEasyEdaJsonToCircuitJson,
@@ -72,9 +73,7 @@ export interface FootprintPreview {
   title: string
 }
 
-type CircuitElement = Record<string, unknown> & {
-  type: string
-}
+type CircuitElement = AnyCircuitElement & Record<string, unknown>
 
 const normalizePortHint = (hint: string) => {
   const trimmed = hint.trim()
@@ -298,9 +297,14 @@ export const buildFootprinterPreview = (
   }
 }
 
-export const buildJlcpcbPreview = async (
+export interface JlcpcbFootprint {
+  circuitJson: AnyCircuitElement[]
+  preview: FootprintPreview
+}
+
+export const buildJlcpcbFootprint = async (
   jlcpcbPartNumber: string,
-): Promise<FootprintPreview> => {
+): Promise<JlcpcbFootprint> => {
   const normalizedPartNumber = normalizeJlcpcbPartNumber(jlcpcbPartNumber)
 
   let rawComponent: unknown
@@ -370,9 +374,17 @@ export const buildJlcpcbPreview = async (
   }
 
   return {
-    pads,
-    sourceHints: collectJlcSourceHints(rawComponent),
-    subtitle: parsedComponent.title ?? 'Validated directly by EasyEDA',
-    title: parsedComponent.lcsc.number,
+    circuitJson,
+    preview: {
+      pads,
+      sourceHints: collectJlcSourceHints(rawComponent),
+      subtitle: parsedComponent.title ?? 'Validated directly by EasyEDA',
+      title: parsedComponent.lcsc.number,
+    },
   }
 }
+
+export const buildJlcpcbPreview = async (
+  jlcpcbPartNumber: string,
+): Promise<FootprintPreview> =>
+  (await buildJlcpcbFootprint(jlcpcbPartNumber)).preview
