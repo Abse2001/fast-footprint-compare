@@ -6,6 +6,8 @@ import type {
   ApiErrorResponse,
   ApiErrorPayload,
   CompareResponse,
+  DiscoverResponse,
+  FootprinterDiscoveryCandidate,
   InputField,
 } from './lib/types'
 
@@ -37,6 +39,11 @@ const getApiErrorPayload = (
   payload: CompareResponse | ApiErrorResponse | null,
 ): ApiErrorPayload | undefined => (payload && 'error' in payload ? payload.error : undefined)
 
+const isDiscoverResponse = (
+  payload: DiscoverResponse | ApiErrorResponse | null,
+): payload is DiscoverResponse =>
+  Boolean(payload && 'best' in payload && 'comparison' in payload)
+
 function App() {
   const [footprinterString, setFootprinterString] = useState('')
   const [jlcpcbPartNumber, setJlcpcbPartNumber] = useState('')
@@ -49,6 +56,13 @@ function App() {
   const [errorHint, setErrorHint] = useState<string | null>(null)
   const [fieldErrors, setFieldErrors] = useState<Partial<Record<InputField, string>>>({})
   const [isLoading, setIsLoading] = useState(false)
+  const [isDiscovering, setIsDiscovering] = useState(false)
+  const [discoveryCandidates, setDiscoveryCandidates] = useState<
+    FootprinterDiscoveryCandidate[]
+  >([])
+  const [discoveryDiagnostics, setDiscoveryDiagnostics] = useState<
+    DiscoverResponse['diagnostics'] | null
+  >(null)
   const [isPending, startTransition] = useTransition()
 
   const comparison = useMemo(() => {
@@ -204,6 +218,63 @@ function App() {
     })
   }
 
+  const handleDiscover = async () => {
+    setErrorMessage(null)
+    setErrorHint(null)
+    const jlcpcbPartNumberError = validateJlcpcbPartNumber(jlcpcbPartNumber)
+    if (jlcpcbPartNumberError) {
+      setFieldErrors({ jlcpcbPartNumber: jlcpcbPartNumberError })
+      setErrorMessage('Enter a JLCPCB part number before discovering a footprint.')
+      return
+    }
+
+    try {
+      setIsDiscovering(true)
+      setFieldErrors({})
+      const response = await fetch('/api/discover', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jlcpcbPartNumber, maxCandidates: 5 }),
+      })
+      const payload = (await response.json()) as
+        | DiscoverResponse
+        | ApiErrorResponse
+      const payloadError = 'error' in payload ? payload.error : undefined
+
+      if (!response.ok || !isDiscoverResponse(payload)) {
+        if (payloadError?.fieldErrors) setFieldErrors(payloadError.fieldErrors)
+        setErrorHint(payloadError?.hint ?? null)
+        throw new Error(
+          payloadError?.message ?? 'Unable to discover a footprinter string.',
+        )
+      }
+
+      const normalizedPartNumber = jlcpcbPartNumber.trim().toUpperCase()
+      setFootprinterString(payload.best.footprinterString)
+      setDiscoveryCandidates(payload.candidates)
+      setDiscoveryDiagnostics(payload.diagnostics)
+      startTransition(() => {
+        setCompareResponse(payload.comparison)
+        setComparedInputs({
+          footprinterString: payload.best.footprinterString,
+          jlcpcbPartNumber: normalizedPartNumber,
+        })
+      })
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : 'Unknown footprint discovery error',
+      )
+      setCompareResponse(null)
+      setComparedInputs(null)
+      setDiscoveryCandidates([])
+      setDiscoveryDiagnostics(null)
+    } finally {
+      setIsDiscovering(false)
+    }
+  }
+
   const handleLoadExample = () => {
     setFootprinterString(exampleInputs.footprinterString)
     setJlcpcbPartNumber(exampleInputs.jlcpcbPartNumber)
@@ -212,6 +283,8 @@ function App() {
     setErrorMessage(null)
     setErrorHint(null)
     setFieldErrors({})
+    setDiscoveryCandidates([])
+    setDiscoveryDiagnostics(null)
 
     void runComparison(exampleInputs)
   }
@@ -327,6 +400,8 @@ function App() {
                 value={footprinterString}
                 onChange={(event) => {
                   setFootprinterString(event.target.value)
+                  setDiscoveryCandidates([])
+                  setDiscoveryDiagnostics(null)
                   setCompareResponse(null)
                   setComparedInputs(null)
                   clearFieldError('footprinterString')
@@ -354,6 +429,8 @@ function App() {
                 value={jlcpcbPartNumber}
                 onChange={(event) => {
                   setJlcpcbPartNumber(event.target.value.toUpperCase())
+                  setDiscoveryCandidates([])
+                  setDiscoveryDiagnostics(null)
                   setCompareResponse(null)
                   setComparedInputs(null)
                   clearFieldError('jlcpcbPartNumber')
@@ -380,15 +457,23 @@ function App() {
               <button
                 className="inline-flex items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:border-slate-400 hover:bg-slate-100 disabled:cursor-wait disabled:opacity-70"
                 type="button"
-                disabled={isLoading || isPending}
+                disabled={isLoading || isPending || isDiscovering}
                 onClick={handleLoadExample}
               >
                 {isLoading ? 'Loading example…' : 'Load working example'}
               </button>
               <button
+                className="inline-flex items-center justify-center rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-700 transition hover:border-blue-300 hover:bg-blue-100 disabled:cursor-wait disabled:opacity-70"
+                type="button"
+                disabled={isLoading || isPending || isDiscovering}
+                onClick={() => void handleDiscover()}
+              >
+                {isDiscovering ? 'Searching parameter space…' : 'Discover from JLCPCB'}
+              </button>
+              <button
                 className="inline-flex items-center justify-center rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-wait disabled:opacity-70"
                 type="submit"
-                disabled={isLoading || isPending}
+                disabled={isLoading || isPending || isDiscovering}
               >
                 {isLoading || isPending ? 'Validating…' : 'Validate and compare'}
               </button>
@@ -409,6 +494,52 @@ function App() {
                 <p className="mt-1 text-sm text-red-600">{errorHint}</p>
               ) : null}
             </div>
+          ) : null}
+
+          {discoveryCandidates.length > 0 && discoveryDiagnostics ? (
+            <section className="mt-4 rounded-2xl border border-blue-200 bg-blue-50 p-4">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <div className={sectionLabelClass}>Smart Search Results</div>
+                  <p className="mt-1 text-sm text-slate-600">
+                    Classified as {discoveryDiagnostics.topology}; evaluated{' '}
+                    {discoveryDiagnostics.evaluatedSeeds} domain seeds and refined{' '}
+                    {discoveryDiagnostics.optimizedSeeds} with numerical gradients.
+                  </p>
+                </div>
+                <span className="text-xs text-slate-500">
+                  {discoveryDiagnostics.targetPadCount} target pads
+                </span>
+              </div>
+              <div className="mt-3 grid gap-2 lg:grid-cols-2">
+                {discoveryCandidates.map((candidate, index) => (
+                  <button
+                    className="flex items-center justify-between gap-3 rounded-xl border border-blue-100 bg-white px-3 py-3 text-left transition hover:border-blue-300"
+                    key={candidate.footprinterString}
+                    type="button"
+                    onClick={() => {
+                      setFootprinterString(candidate.footprinterString)
+                      void runComparison({
+                        footprinterString: candidate.footprinterString,
+                        jlcpcbPartNumber,
+                      })
+                    }}
+                  >
+                    <span className="min-w-0">
+                      <span className="block text-xs font-semibold uppercase tracking-wide text-blue-600">
+                        {index === 0 ? 'Best match' : candidate.family}
+                      </span>
+                      <code className="mt-1 block truncate text-xs text-slate-800">
+                        {candidate.footprinterString}
+                      </code>
+                    </span>
+                    <span className="shrink-0 text-sm font-semibold text-slate-900">
+                      {formatPercent(candidate.copperIntersectionOverUnion)}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </section>
           ) : null}
 
           {hasLiveComparison && compareResponse && comparison ? (

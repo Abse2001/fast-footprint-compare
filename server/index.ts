@@ -3,6 +3,10 @@ import {
   createInvalidJsonResponse,
   handleCompareRequest,
 } from './compareApi.js'
+import {
+  createDiscoverInvalidJsonResponse,
+  handleDiscoverRequest,
+} from './discoverApi.js'
 
 const app = express()
 const port = Number.parseInt(process.env.PORT ?? '8787', 10)
@@ -14,10 +18,15 @@ app.post('/api/compare', async (request, response) => {
   response.status(result.status).json(result.body)
 })
 
+app.post('/api/discover', async (request, response) => {
+  const result = await handleDiscoverRequest(request.body)
+  response.status(result.status).json(result.body)
+})
+
 app.use(
   (
     error: unknown,
-    _request: express.Request,
+    request: express.Request,
     response: express.Response,
     _next: express.NextFunction,
   ) => {
@@ -28,7 +37,9 @@ app.use(
       'status' in error &&
       error.status === 400
     ) {
-      const invalidJsonResponse = createInvalidJsonResponse()
+      const invalidJsonResponse = request.path.endsWith('/discover')
+        ? createDiscoverInvalidJsonResponse()
+        : createInvalidJsonResponse()
       response.status(invalidJsonResponse.status).json(invalidJsonResponse.body)
       return
     }

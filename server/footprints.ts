@@ -67,6 +67,7 @@ export interface PreviewPad {
 
 export interface FootprintPreview {
   pads: PreviewPad[]
+  sourceHints?: string[]
   subtitle: string
   title: string
 }
@@ -110,6 +111,43 @@ const toNumber = (value: unknown, fallback = 0) => {
 
 const getErrorMessage = (error: unknown) =>
   error instanceof Error ? error.message : 'Unexpected error'
+
+const asRecord = (value: unknown): Record<string, unknown> | undefined =>
+  typeof value === 'object' && value !== null
+    ? (value as Record<string, unknown>)
+    : undefined
+
+const collectJlcSourceHints = (rawComponent: unknown) => {
+  const component = asRecord(rawComponent)
+  const dataStr = asRecord(component?.dataStr)
+  const head = asRecord(dataStr?.head)
+  const componentParameters = asRecord(head?.c_para)
+  const packageDetail = asRecord(component?.packageDetail)
+  const packageDataStr = asRecord(packageDetail?.dataStr)
+  const packageHead = asRecord(packageDataStr?.head)
+  const packageParameters = asRecord(packageHead?.c_para)
+  const lcsc = asRecord(component?.lcsc)
+  const values = [
+    component?.title,
+    component?.description,
+    componentParameters?.package,
+    componentParameters?.pre,
+    packageDetail?.title,
+    packageParameters?.package,
+    packageParameters?.pre,
+    lcsc?.url,
+    ...(Array.isArray(component?.tags) ? component.tags : []),
+  ]
+
+  return [
+    ...new Set(
+      values
+        .filter((value): value is string => typeof value === 'string')
+        .map((value) => value.trim())
+        .filter(Boolean),
+    ),
+  ]
+}
 
 const createFootprinterBuildError = (
   footprinterString: string,
@@ -333,6 +371,7 @@ export const buildJlcpcbPreview = async (
 
   return {
     pads,
+    sourceHints: collectJlcSourceHints(rawComponent),
     subtitle: parsedComponent.title ?? 'Validated directly by EasyEDA',
     title: parsedComponent.lcsc.number,
   }
