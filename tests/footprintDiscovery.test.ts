@@ -56,4 +56,20 @@ describe('discoverFootprinterString', () => {
     expect(result.best?.footprinterString).toContain('qfn24_thermalpad')
     expect(result.best?.copperIntersectionOverUnion).toBe(1)
   })
+
+  test('sizes an exposed thermal pad independently from the package body', () => {
+    const source =
+      'qfn56_w7_h7_p0.4_pw0.2_pl0.85_thermalpad3.1mmx3.1mm'
+    const result = discoverFootprinterString(
+      buildFootprinterPreview(source),
+      2,
+    )
+
+    expect(result.diagnostics.targetPadCount).toBe(57)
+    expect(result.best?.family).toBe('qfn')
+    expect(result.best?.footprinterString).toContain(
+      'thermalpad3.1mmx3.1mm',
+    )
+    expect(result.best?.copperIntersectionOverUnion).toBe(1)
+  })
 })

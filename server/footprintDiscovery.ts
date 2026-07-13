@@ -44,12 +44,15 @@ interface Bounds {
 
 interface TargetAnalysis {
   bounds: Bounds
-  centerPadCount: number
   gridColumns: number
   gridRows: number
   heuristics: Record<NumericParameter, number>
   perimeterPadCount: number
   platedHoleCount: number
+  thermalPad?: {
+    height: number
+    width: number
+  }
   topology: Topology
 }
 
@@ -213,11 +216,22 @@ const analyzeTarget = (target: FootprintPreview): TargetAnalysis => {
       Math.abs(pad.y - (bounds.minY + medianPadHeight / 2)) <= edgeToleranceY ||
       Math.abs(pad.y - (bounds.maxY - medianPadHeight / 2)) <= edgeToleranceY,
   )
-  const centerPadCount = target.pads.filter(
-    (pad) =>
-      Math.abs(pad.x - centerX) <= medianPadWidth &&
-      Math.abs(pad.y - centerY) <= medianPadHeight,
-  ).length
+  const medianPadArea = median(
+    padBounds.map((bound) => bound.width * bound.height),
+  )
+  const thermalPad = target.pads
+    .map((pad) => ({ bound: getPadBounds(pad), pad }))
+    .filter(
+      ({ bound, pad }) =>
+        Math.abs(pad.x - centerX) <= medianPadWidth &&
+        Math.abs(pad.y - centerY) <= medianPadHeight &&
+        bound.width * bound.height > medianPadArea * 2.5,
+    )
+    .sort(
+      (left, right) =>
+        right.bound.width * right.bound.height -
+        left.bound.width * left.bound.height,
+    )[0]?.bound
   const gridOccupancy =
     target.pads.length / Math.max(xCoordinates.length * yCoordinates.length, 1)
   const hasPadsOnFourSides =
@@ -259,7 +273,6 @@ const analyzeTarget = (target: FootprintPreview): TargetAnalysis => {
 
   return {
     bounds,
-    centerPadCount,
     gridColumns: xCoordinates.length,
     gridRows: yCoordinates.length,
     heuristics: {
@@ -276,6 +289,9 @@ const analyzeTarget = (target: FootprintPreview): TargetAnalysis => {
     },
     perimeterPadCount: sidePads.length,
     platedHoleCount,
+    thermalPad: thermalPad
+      ? { height: thermalPad.height, width: thermalPad.width }
+      : undefined,
     topology,
   }
 }
@@ -473,9 +489,15 @@ const generateSeeds = (target: FootprintPreview, analysis: TargetAnalysis) => {
     seeds.add(family)
   }
 
-  if (analysis.centerPadCount > 0 && analysis.perimeterPadCount > 0) {
+  if (analysis.thermalPad && analysis.perimeterPadCount > 0) {
+    const thermalPadDimensions = `${formatMillimeters(
+      analysis.thermalPad.width,
+    )}x${formatMillimeters(analysis.thermalPad.height)}`
     for (const family of ['mlp', 'qfn', 'quad']) {
       seeds.add(`${family}${analysis.perimeterPadCount}_thermalpad`)
+      seeds.add(
+        `${family}${analysis.perimeterPadCount}_thermalpad${thermalPadDimensions}`,
+      )
     }
   }
 
