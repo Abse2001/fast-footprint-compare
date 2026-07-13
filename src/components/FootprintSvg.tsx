@@ -147,8 +147,10 @@ export function FootprintSvg({
         />
 
         {layers.flatMap((layer) =>
-          layer.footprint.pads.map((pad) => (
-            <g key={`${layer.label}-${pad.id}`}>
+          layer.footprint.pads.map((pad, padIndex) => (
+            <g
+              key={`${layer.label}-${pad.id || pad.portHints.join('-') || padIndex}`}
+            >
               {padElement(pad, layer.accent, layer.fillOpacity)}
               {showLabels ? (
                 <text

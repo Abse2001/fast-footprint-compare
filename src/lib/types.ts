@@ -18,6 +18,7 @@ export interface PreviewPad {
 
 export interface FootprintPreview {
   pads: PreviewPad[]
+  sourceHints?: string[]
   subtitle: string
   title: string
 }
@@ -26,6 +27,33 @@ export interface CompareResponse {
   copperIntersectionOverUnion: number
   left: FootprintPreview
   right: FootprintPreview
+}
+
+export interface FootprinterDiscoveryCandidate {
+  copperIntersectionOverUnion: number
+  domainScore: number
+  family: string
+  footprinterString: string
+  geometryScore: number
+  optimizedParameters: Partial<
+    Record<
+      'p' | 'w' | 'h' | 'pw' | 'ph' | 'pl' | 'pad' | 'ball' | 'od' | 'id',
+      number
+    >
+  >
+  rankingScore: number
+}
+
+export interface DiscoverResponse {
+  best: FootprinterDiscoveryCandidate
+  candidates: FootprinterDiscoveryCandidate[]
+  comparison: CompareResponse
+  diagnostics: {
+    evaluatedSeeds: number
+    optimizedSeeds: number
+    targetPadCount: number
+    topology: string
+  }
 }
 
 export interface ApiErrorPayload {
