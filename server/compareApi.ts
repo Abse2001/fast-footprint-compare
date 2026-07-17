@@ -12,6 +12,7 @@ const directJlcPartNumberPattern = /^C\d+$/i
 
 export interface CompareResponse {
   copperIntersectionOverUnion: number
+  holeIntersectionOverUnion: number
   left: FootprintPreview
   right: FootprintPreview
 }
@@ -96,17 +97,6 @@ export const createInvalidJsonResponse = (): CompareApiResult => ({
   status: 400,
 })
 
-export const createMethodNotAllowedResponse = (): CompareApiResult => ({
-  body: {
-    error: {
-      code: 'METHOD_NOT_ALLOWED',
-      hint: 'Use POST /api/compare.',
-      message: 'Only POST is supported on this endpoint.',
-    },
-  },
-  status: 405,
-})
-
 const createPreviewErrorResponse = (error: PreviewBuildError): CompareApiResult => ({
   body: {
     error: {
@@ -169,6 +159,8 @@ export const handleCompareRequest = async (
       body: {
         copperIntersectionOverUnion:
           copperComparison.copperIntersectionOverUnion,
+        holeIntersectionOverUnion:
+          copperComparison.holeIntersectionOverUnion,
         left,
         right,
       },
